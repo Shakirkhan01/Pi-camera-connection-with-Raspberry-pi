@@ -1,0 +1,55 @@
+import cv2
+from ultralytics import YOLO
+import torch
+import threading
+import time
+import serial
+from picamera2 import Picamera2
+import time
+# Initialize serial communication with Arduino
+ser = serial.Serial('/dev/ttyACMO', 9600, timeout=1)
+ser. flush()
+# Define disease classes
+disease_classes=["Early Blight", "Healthy", "Late Blight", "Leaf Miner", "Leaf Mold", "Mosaic Virus", "S]
+
+def capture_and_process():
+device = 'cuda' if torch.cuda. is_available() else 'cpu'
+model = YOLO('best.pt', conf_thres=0.1).to(device) # Assuming 'best.pt' is the YOLO model weights file
+
+while True:
+frame = piCam.capture_array() # Capture an image
+im = cv2.flip(frame, -1)
+im_resized = cv2.resize(im, (640, 480))
+results = model.predict(im_resized)
+
+boxes = results[0].boxes.data # Extract boxes as numpy array
+
+for box in boxes:
+x1, y1, x2, y2, conf, d = map(int, box)
+class_name = disease_classes[d]
+
+# Send command to Arduino based on disease class
+if class_name != "Healthy":
+ser.write(b"STOP\n") # Send stop command to Arduino
+time.sleep(1) # Wait for 1 second
+# Display the processed frame and detected class
+cv2.rectangle(im, (x1, y1), (x2, y2), (0, 0, 255), 2)
+text = f"{class_name} ({conf * 100 :. 2f}%)"
+cv2.putText(im, text, (x1, y1 + 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
+cv2. imshow('YOLO Object Detection', im)
+cv2.waitKey(1000) # Display each image for 1 second
+
+# Start the capture and processing thread
+process_thread = threading. Thread(target=capture_and_process)
+process_thread.start()
+
+# Keep the program running until interrupted
+try:
+while True:
+time.sleep(1)
+except KeyboardInterrupt:
+process_thread. join()
+# Close serial connection when done
+ser. close()
+
+
